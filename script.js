@@ -215,15 +215,216 @@
     window.lucide.createIcons();
   }
 
-  /* ---------- 10. Lightbox Modal ---------- */
+  /* ---------- 10. Lightbox Modal with Zoom & Pan ---------- */
   const lightbox = document.getElementById('lightbox');
   const lightboxImg = document.getElementById('lightbox-image');
   const lightboxClose = document.getElementById('lightbox-close');
+  const zoomContainer = document.getElementById('lightbox-zoom-container');
 
-  if (lightbox && lightboxImg && lightboxClose) {
+  if (lightbox && lightboxImg && lightboxClose && zoomContainer) {
+    let scale = 1;
+    let translateX = 0;
+    let translateY = 0;
+    let isDragging = false;
+    let startX = 0;
+    let startY = 0;
+    
+    // For pinch-to-zoom
+    let initialDistance = 0;
+    let initialScale = 1;
+    let touchCenterX = 0;
+    let touchCenterY = 0;
+    
+    // Double tap/click toggle trigger time
+    let lastTapTime = 0;
+
+    // Apply scaling and translations
+    function applyTransform() {
+      // Limit translation boundaries so the user doesn't drag the image off-screen
+      if (scale === 1) {
+        translateX = 0;
+        translateY = 0;
+      } else {
+        // Calculate max bounds based on scaled size
+        const rect = lightboxImg.getBoundingClientRect();
+        const parentRect = zoomContainer.getBoundingClientRect();
+        
+        const maxW = Math.max(0, (rect.width - parentRect.width) / 2);
+        const maxH = Math.max(0, (rect.height - parentRect.height) / 2);
+        
+        // Clamp translations
+        translateX = Math.max(-maxW, Math.min(maxW, translateX));
+        translateY = Math.max(-maxH, Math.min(maxH, translateY));
+      }
+      
+      lightboxImg.style.transform = `scale(${scale}) translate(${translateX / scale}px, ${translateY / scale}px)`;
+    }
+
+    // Reset Zoom
+    function resetZoom() {
+      scale = 1;
+      translateX = 0;
+      translateY = 0;
+      lightboxImg.style.transition = 'transform 0.3s ease-out';
+      applyTransform();
+      setTimeout(function () {
+        if (lightboxImg) lightboxImg.style.transition = 'none';
+      }, 300);
+    }
+
+    // Mouse / Touch Drag events for Panning
+    function startDrag(clientX, clientY) {
+      if (scale > 1) {
+        isDragging = true;
+        startX = clientX - translateX;
+        startY = clientY - translateY;
+        lightboxImg.style.transition = 'none';
+      }
+    }
+
+    function doDrag(clientX, clientY) {
+      if (!isDragging) return;
+      translateX = clientX - startX;
+      translateY = clientY - startY;
+      applyTransform();
+    }
+
+    function stopDrag() {
+      isDragging = false;
+    }
+
+    // Mouse listeners
+    zoomContainer.addEventListener('mousedown', function (e) {
+      e.preventDefault();
+      startDrag(e.clientX, e.clientY);
+    });
+
+    window.addEventListener('mousemove', function (e) {
+      if (isDragging) {
+        doDrag(e.clientX, e.clientY);
+      }
+    });
+
+    window.addEventListener('mouseup', function () {
+      stopDrag();
+    });
+
+    // Touch events for Pan & Pinch
+    zoomContainer.addEventListener('touchstart', function (e) {
+      lightboxImg.style.transition = 'none';
+      if (e.touches.length === 1) {
+        // Single touch -> Pan
+        const touch = e.touches[0];
+        startDrag(touch.clientX, touch.clientY);
+      } else if (e.touches.length === 2) {
+        // Multi-touch -> Pinch
+        isDragging = false; 
+        const touch1 = e.touches[0];
+        const touch2 = e.touches[1];
+        
+        initialDistance = Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY);
+        initialScale = scale;
+        
+        // Calculate center of the two touches
+        touchCenterX = (touch1.clientX + touch2.clientX) / 2;
+        touchCenterY = (touch1.clientY + touch2.clientY) / 2;
+      }
+    });
+
+    zoomContainer.addEventListener('touchmove', function (e) {
+      if (e.touches.length === 1 && isDragging) {
+        const touch = e.touches[0];
+        doDrag(touch.clientX, touch.clientY);
+      } else if (e.touches.length === 2) {
+        const touch1 = e.touches[0];
+        const touch2 = e.touches[1];
+        
+        const currentDistance = Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY);
+        if (initialDistance > 0) {
+          const factor = currentDistance / initialDistance;
+          scale = Math.max(1, Math.min(4, initialScale * factor));
+          applyTransform();
+        }
+      }
+    });
+
+    zoomContainer.addEventListener('touchend', function (e) {
+      if (e.touches.length === 0) {
+        stopDrag();
+        initialDistance = 0;
+      }
+    });
+
+    // Mouse wheel zoom centered on cursor
+    zoomContainer.addEventListener('wheel', function (e) {
+      e.preventDefault();
+      
+      const zoomFactor = 1.15;
+      const oldScale = scale;
+      
+      lightboxImg.style.transition = 'none';
+      
+      if (e.deltaY < 0) {
+        scale = Math.min(4, scale * zoomFactor);
+      } else {
+        scale = Math.max(1, scale / zoomFactor);
+      }
+
+      if (scale > 1 && scale !== oldScale) {
+        const rect = zoomContainer.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left - rect.width / 2;
+        const mouseY = e.clientY - rect.top - rect.height / 2;
+        
+        translateX -= mouseX * (scale / oldScale - 1);
+        translateY -= mouseY * (scale / oldScale - 1);
+      }
+      
+      applyTransform();
+    }, { passive: false });
+
+    // Double tap / Double click to zoom toggle (2.5x zoom or back to 1x)
+    function handleDoubleTap(clientX, clientY) {
+      if (scale > 1) {
+        resetZoom();
+      } else {
+        scale = 2.5;
+        lightboxImg.style.transition = 'transform 0.3s ease-out';
+        
+        const rect = zoomContainer.getBoundingClientRect();
+        const clickX = clientX - rect.left - rect.width / 2;
+        const clickY = clientY - rect.top - rect.height / 2;
+        
+        translateX = -clickX * (scale - 1);
+        translateY = -clickY * (scale - 1);
+        
+        applyTransform();
+        setTimeout(function () {
+          if (lightboxImg) lightboxImg.style.transition = 'none';
+        }, 300);
+      }
+    }
+
+    // Double click listener
+    zoomContainer.addEventListener('dblclick', function (e) {
+      handleDoubleTap(e.clientX, e.clientY);
+    });
+
+    // Double tap listener for mobile
+    zoomContainer.addEventListener('touchend', function (e) {
+      const currentTime = new Date().getTime();
+      const tapLength = currentTime - lastTapTime;
+      
+      if (tapLength < 300 && tapLength > 0) {
+        const touch = e.changedTouches[0];
+        handleDoubleTap(touch.clientX, touch.clientY);
+        e.preventDefault(); 
+      }
+      lastTapTime = currentTime;
+    });
+
     // Open lightbox on gallery item click
     document.querySelectorAll('.gallery__item').forEach(function (item) {
-      item.style.cursor = 'pointer'; // Show pointer cursor on hover
+      item.style.cursor = 'pointer'; 
       
       item.addEventListener('click', function () {
         const img = this.querySelector('img');
@@ -233,7 +434,8 @@
           lightboxImg.alt = img.alt;
           lightbox.classList.add('active');
           lightbox.setAttribute('aria-hidden', 'false');
-          document.body.classList.add('lightbox-open'); // Locks scroll globally
+          document.body.classList.add('lightbox-open'); 
+          resetZoom(); // Always open at standard 1x scale
         }
       });
     });
@@ -243,13 +445,14 @@
       lightbox.classList.remove('active');
       lightbox.setAttribute('aria-hidden', 'true');
       document.body.classList.remove('lightbox-open');
+      resetZoom();
     }
 
     lightboxClose.addEventListener('click', closeLightbox);
 
-    // Close on clicking overlay background
+    // Close on clicking overlay background (only close if not zoomed in)
     lightbox.addEventListener('click', function (e) {
-      if (e.target === lightbox || e.target === lightbox.querySelector('.lightbox__content')) {
+      if (scale === 1 && (e.target === lightbox || e.target === zoomContainer || e.target === lightbox.querySelector('.lightbox__content'))) {
         closeLightbox();
       }
     });
