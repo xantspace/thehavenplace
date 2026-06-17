@@ -1457,14 +1457,19 @@ option {
   display: flex;
   align-items: center;
   justify-content: center;
-  cursor: grab;
+  cursor: default;
   touch-action: none;
   user-select: none;
   overflow: visible;
   pointer-events: auto;
 }
 
-.lightbox__zoom-container:active {
+/* Grab cursor only active when zoomed in */
+.lightbox__zoom-container.zoom-active {
+  cursor: grab;
+}
+
+.lightbox__zoom-container.zoom-active:active {
   cursor: grabbing;
 }
 

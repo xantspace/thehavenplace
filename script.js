@@ -244,7 +244,9 @@
       if (scale === 1) {
         translateX = 0;
         translateY = 0;
+        zoomContainer.classList.remove('zoom-active');
       } else {
+        zoomContainer.classList.add('zoom-active');
         // Calculate max bounds based on scaled size
         const rect = lightboxImg.getBoundingClientRect();
         const parentRect = zoomContainer.getBoundingClientRect();
